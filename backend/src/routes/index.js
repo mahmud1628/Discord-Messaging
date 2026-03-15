@@ -1,6 +1,6 @@
 const express = require('express');
 const healthRouter = require('./health.routes');
-const messageRoutes = require('./messageRoutes');
+const messageRoutes = require('./message.routes');
 const apiRouter = express.Router();
 
 apiRouter.use('/health', healthRouter);
