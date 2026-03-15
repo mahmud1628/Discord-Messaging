@@ -1,8 +1,8 @@
 const express = require("express");
-const { listMessages } = require("../controllers/message.controller");
+const messageRoutes = require("./message.routes");
 
 const router = express.Router({ mergeParams: true });
 
-router.get("/", listMessages);
+router.use("/:channelId/messages", messageRoutes);
 
 module.exports = router;
