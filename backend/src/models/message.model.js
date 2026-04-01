@@ -31,3 +31,24 @@ exports.listMessages = async ({ serverId, channelId, before, after, limit }) => 
 
   return pool.query(query, values);
 };
+
+//  ADD REACTION
+exports.addReaction = async ({ messageId, userId, emoji }) => {
+  const query = `
+    INSERT INTO message_reactions (message_id, user_id, emoji)
+    VALUES ($1, $2, $3)
+    ON CONFLICT DO NOTHING
+  `;
+
+  return pool.query(query, [messageId, userId, emoji]);
+};
+
+// REMOVE REACTION
+exports.removeReaction = async ({ messageId, userId, emoji }) => {
+  const query = `
+    DELETE FROM message_reactions
+    WHERE message_id = $1 AND user_id = $2 AND emoji = $3
+  `;
+
+  return pool.query(query, [messageId, userId, emoji]);
+};
