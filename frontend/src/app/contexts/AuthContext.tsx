@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router";
+import { loginUser, registerUser } from "../utils/api";
 
 interface User {
   id: string;
@@ -11,8 +12,9 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
@@ -30,37 +32,47 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for existing session
     const storedUser = localStorage.getItem("user");
+    const storedToken = localStorage.getItem("token");
+
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
+
+    if (storedToken) {
+      setToken(storedToken);
+    }
+
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string) => {
     setIsLoading(true);
     try {
-      // Mock API call - replace with actual REST API
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      
-      const mockUser: User = {
-        id: "user-1",
-        email,
-        username: email.split("@")[0],
-        displayName: email.split("@")[0],
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+      const response = await loginUser(identifier, password);
+
+      const authenticatedUser: User = {
+        id: String(response.data.user.id),
+        email: response.data.user.email,
+        username: response.data.user.username,
+        displayName:
+          response.data.user.displayName || response.data.user.username,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${response.data.user.username}`,
       };
 
-      localStorage.setItem("user", JSON.stringify(mockUser));
-      setUser(mockUser);
+      localStorage.setItem("user", JSON.stringify(authenticatedUser));
+      localStorage.setItem("token", response.data.token);
+      setUser(authenticatedUser);
+      setToken(response.data.token);
       navigate("/app");
     } catch (error) {
-      throw new Error("Login failed");
+      const message = error instanceof Error ? error.message : "Login failed";
+      throw new Error(message);
     } finally {
       setIsLoading(false);
     }
@@ -69,22 +81,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (data: RegisterData) => {
     setIsLoading(true);
     try {
-      // Mock API call - replace with actual REST API
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      
-      const mockUser: User = {
-        id: "user-" + Date.now(),
+      const response = await registerUser({
         email: data.email,
         username: data.username,
+        password: data.password,
         displayName: data.displayName,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.username}`,
+        dateOfBirth: data.dateOfBirth,
+      });
+
+      const authenticatedUser: User = {
+        id: String(response.data.user.id),
+        email: response.data.user.email,
+        username: response.data.user.username,
+        displayName:
+          response.data.user.displayName || response.data.user.username,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${response.data.user.username}`,
       };
 
-      localStorage.setItem("user", JSON.stringify(mockUser));
-      setUser(mockUser);
+      localStorage.setItem("user", JSON.stringify(authenticatedUser));
+      localStorage.setItem("token", response.data.token);
+      setUser(authenticatedUser);
+      setToken(response.data.token);
       navigate("/app");
     } catch (error) {
-      throw new Error("Registration failed");
+      const message = error instanceof Error ? error.message : "Registration failed";
+      throw new Error(message);
     } finally {
       setIsLoading(false);
     }
@@ -92,7 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem("user");
+    localStorage.removeItem("token");
     setUser(null);
+    setToken(null);
     navigate("/login");
   };
 
@@ -100,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        token,
         isAuthenticated: !!user,
         login,
         register,

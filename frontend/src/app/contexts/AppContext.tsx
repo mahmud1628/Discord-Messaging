@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useAuth } from "./AuthContext";
+import { getChannelsByServer, getServers } from "../utils/api";
 
 export interface Message {
   id: string;
@@ -84,21 +86,6 @@ const mockUsers: UserProfile[] = [
   },
 ];
 
-const mockServers: Server[] = [
-  { id: "server-1", name: "My Server", iconColor: "#57F287" },
-  { id: "server-2", name: "Tech Hub", iconColor: "#FEE75C" },
-  { id: "server-3", name: "Gaming", iconColor: "#EB459E" },
-];
-
-const mockChannels: Channel[] = [
-  { id: "channel-1", name: "general", serverId: "server-1", type: "text" },
-  { id: "channel-2", name: "announcements", serverId: "server-1", type: "text" },
-  { id: "channel-3", name: "random", serverId: "server-1", type: "text" },
-  { id: "channel-4", name: "general", serverId: "server-2", type: "text" },
-  { id: "channel-5", name: "help", serverId: "server-2", type: "text" },
-  { id: "channel-6", name: "general", serverId: "server-3", type: "text" },
-];
-
 const mockMessages: Message[] = [
   {
     id: "msg-1",
@@ -155,16 +142,83 @@ const mockMessages: Message[] = [
   },
 ];
 
+const SERVER_COLORS = ["#5865F2", "#57F287", "#FEE75C", "#EB459E", "#ED4245", "#3BA55D"];
+
+const getServerColor = (serverId: string) => {
+  let hash = 0;
+  for (let i = 0; i < serverId.length; i += 1) {
+    hash = (hash << 5) - hash + serverId.charCodeAt(i);
+    hash |= 0;
+  }
+
+  const index = Math.abs(hash) % SERVER_COLORS.length;
+  return SERVER_COLORS[index];
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [servers] = useState<Server[]>(mockServers);
-  const [channels] = useState<Channel[]>(mockChannels);
+  const { isAuthenticated, token } = useAuth();
+  const [servers, setServers] = useState<Server[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [messages, setMessages] = useState<Message[]>(mockMessages);
   const [users] = useState<UserProfile[]>(mockUsers);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
 
-  const pinnedMessages = messages.filter(
-    (msg) => msg.pinned && msg.channelId === selectedChannelId
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setServers([]);
+      setChannels([]);
+      setSelectedServerId(null);
+      setSelectedChannelId(null);
+      return;
+    }
+
+    const loadServersAndChannels = async () => {
+      try {
+        const serverResponse = await getServers(token);
+        const mappedServers: Server[] = serverResponse.servers.map((server) => {
+          const id = String(server.id);
+          return {
+            id,
+            name: server.name,
+            iconColor: getServerColor(id),
+          };
+        });
+
+        setServers(mappedServers);
+
+        if (mappedServers.length === 0) {
+          setChannels([]);
+          return;
+        }
+
+        const channelResponses = await Promise.all(
+          mappedServers.map((server) => getChannelsByServer(server.id, token))
+        );
+
+        const allChannels: Channel[] = channelResponses.flatMap((response) =>
+          response.channels.map((channel) => ({
+            id: String(channel.id),
+            name: channel.name,
+            serverId: String(channel.server_id),
+            type: "text" as const,
+          }))
+        );
+
+        setChannels(allChannels);
+      } catch (error) {
+        console.error("Failed to load servers/channels", error);
+        setServers([]);
+        setChannels([]);
+      }
+    };
+
+    loadServersAndChannels();
+  }, [isAuthenticated, token]);
+
+  const pinnedMessages = useMemo(
+    () => messages.filter((msg) => msg.pinned && msg.channelId === selectedChannelId),
+    [messages, selectedChannelId]
   );
 
   const setSelectedServer = (serverId: string) => {

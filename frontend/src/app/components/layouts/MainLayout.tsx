@@ -22,6 +22,14 @@ export function MainLayout() {
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
+    if (!serverId && servers.length > 0) {
+      navigate(`/app/${servers[0].id}`);
+    }
+  }, [isAuthenticated, serverId, servers, navigate]);
+
+  useEffect(() => {
     if (serverId) {
       setSelectedServer(serverId);
       

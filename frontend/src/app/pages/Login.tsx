@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -8,18 +8,18 @@ import { MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 export function Login() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const { login, isLoading } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await login(email, password);
+      await login(identifier, password);
       toast.success("Welcome back!");
     } catch (error) {
-      toast.error("Invalid credentials. Please try again.");
+      const message = error instanceof Error ? error.message : "Invalid credentials. Please try again.";
+      toast.error(message);
     }
   };
 
@@ -51,8 +51,8 @@ export function Login() {
               <Input
                 id="email"
                 type="text"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
                 className="bg-[#1e1f22] border-[#1e1f22] text-white placeholder:text-[#6d6f78] focus:border-[#5865f2] focus-visible:ring-0 h-11"
                 placeholder="Enter your email or username"
