@@ -24,14 +24,50 @@ exports.findUserById = async (userId) => {
   );
 };
 
-exports.createMessage = async ({ channelId, authorId, content }) => {
-  return pool.query(
+const runQuery = async (client, query, values) => client.query(query, values);
+
+exports.createMessage = async ({ id, channelId, authorId, content, client = pool }) => {
+  const values = id ? [id, channelId, authorId, content] : [channelId, authorId, content];
+
+  const query = id
+    ? `
+      INSERT INTO messages (id, channel_id, author_id, content)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, channel_id, author_id, content, created_at, edited_at
     `
+    : `
       INSERT INTO messages (channel_id, author_id, content)
       VALUES ($1, $2, $3)
       RETURNING id, channel_id, author_id, content, created_at, edited_at
+    `;
+
+  return runQuery(client, query, values);
+};
+
+exports.insertMessageAttachment = async (
+  { messageId, fileUrl, fileName, fileSize, mimeType },
+  client = pool
+) => {
+  return runQuery(
+    client,
+    `
+      INSERT INTO message_attachments (message_id, file_url, file_name, file_size, mime_type)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, message_id, file_url, file_name, file_size, mime_type, created_at
     `,
-    [channelId, authorId, content]
+    [messageId, fileUrl, fileName, fileSize, mimeType]
+  );
+};
+
+exports.deleteMessageById = async (messageId, client = pool) => {
+  return runQuery(
+    client,
+    `
+      DELETE FROM messages
+      WHERE id = $1
+      RETURNING id
+    `,
+    [messageId]
   );
 };
 

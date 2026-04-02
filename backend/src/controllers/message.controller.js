@@ -3,7 +3,35 @@ const messageService = require("../services/message.service");
 exports.sendMessage = async (req, res) => {
   const { serverId, channelId } = req.params;
   const userId = req.auth.userId;
-  const { content } = req.body;
+  const { content } = req.body || {};
+  const file =
+    req.file ||
+    req.files?.file?.[0] ||
+    req.files?.attachments?.[0] ||
+    null;
+  const isMultipart = req.is("multipart/form-data");
+  const debugFiles = req.files
+    ? Array.isArray(req.files)
+      ? req.files.map((uploadedFile) => ({
+          fieldname: uploadedFile.fieldname,
+          originalname: uploadedFile.originalname,
+          mimetype: uploadedFile.mimetype,
+          size: uploadedFile.size,
+        }))
+      : Object.entries(req.files).flatMap(([fieldName, uploadedFiles]) =>
+          uploadedFiles.map((uploadedFile) => ({
+            fieldname: fieldName,
+            originalname: uploadedFile.originalname,
+            mimetype: uploadedFile.mimetype,
+            size: uploadedFile.size,
+          }))
+        )
+    : [];
+
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[sendMessage] req.body:", req.body || {});
+    console.debug("[sendMessage] req.files:", debugFiles);
+  }
 
   if (!content || !String(content).trim()) {
     return res.status(400).json({
@@ -12,17 +40,36 @@ exports.sendMessage = async (req, res) => {
     });
   }
 
-  try {
-    const createdMessage = await messageService.sendMessage({
-      serverId,
-      channelId,
-      authorId: userId,
-      content: String(content).trim(),
+  if (isMultipart && !file) {
+    return res.status(400).json({
+      error: "Validation error",
+      details: ["file is required"],
     });
+  }
 
-    return res.status(201).json({
-      message: createdMessage.rows[0],
-    });
+  try {
+    const result = file
+      ? await messageService.sendMessageWithAttachment({
+          serverId,
+          channelId,
+          authorId: userId,
+          content: String(content).trim(),
+          file,
+        })
+      : await messageService.sendMessage({
+          serverId,
+          channelId,
+          authorId: userId,
+          content: String(content).trim(),
+        });
+
+    return res.status(201).json(
+      file
+        ? result
+        : {
+            message: result.rows[0],
+          }
+    );
   } catch (err) {
     console.error(err);
 
@@ -30,7 +77,7 @@ exports.sendMessage = async (req, res) => {
       return res.status(err.statusCode).json({ error: err.message });
     }
 
-    return res.status(500).json({ error: "Database error" });
+    return res.status(500).json({ error: err.message || "Database error" });
   }
 };
 
