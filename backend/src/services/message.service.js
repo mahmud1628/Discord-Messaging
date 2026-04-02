@@ -147,20 +147,22 @@ exports.listMessages = async ({ serverId, channelId, before, after, limit }) => 
   });
 };
 
-exports.updateMessage = async ({ channelId, messageId, content, deleteAttachmentIds, hasContent }) => {
+exports.updateMessage = async ({ channelId, messageId, userId, content, deleteAttachmentIds, hasContent }) => {
   return messageModel.updateMessage({
     channelId,
     messageId,
+    userId,
     content,
     deleteAttachmentIds,
     hasContent,
   });
 };
 
-exports.deleteMessage = async ({ channelId, messageId }) => {
+exports.deleteMessage = async ({ channelId, messageId, userId }) => {
   return messageModel.deleteMessage({
     channelId,
     messageId,
+    userId,
   });
 };
 

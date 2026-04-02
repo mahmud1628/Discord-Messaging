@@ -32,7 +32,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     try {
       // In a real app, you would upload attachments first and get URLs
       const messageText = message.trim() || (attachments.length > 0 ? `[${attachments.length} attachment${attachments.length > 1 ? 's' : ''}]` : "");
-      await sendMessage(messageText, channelId);
+      await sendMessage(messageText, channelId, attachments.map((item) => item.file));
       setMessage("");
       clearAttachments();
       toast.success("Message sent!");

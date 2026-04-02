@@ -78,7 +78,7 @@ exports.listMessages = async ({ channelId, before, after, limit = 50 }) => {
 
   if (after) {
     conditions.push(`
-      m.created_at > (      router.post("/", sendMessage);
+      m.created_at > (
         SELECT created_at FROM messages WHERE id = $${paramIndex}
       )
     `);
@@ -99,8 +99,17 @@ exports.listMessages = async ({ channelId, before, after, limit = 50 }) => {
   const query = `
 SELECT 
   m.id,
+  m.channel_id,
+  m.author_id,
   m.content,
   m.created_at,
+  m.edited_at,
+
+  jsonb_build_object(
+    'id', au.id,
+    'username', au.username,
+    'display_name', au.display_name
+  ) AS author,
 
   COALESCE(
     json_agg(DISTINCT jsonb_build_object(
@@ -116,7 +125,11 @@ SELECT
       'id', r.id,
       'emoji', r.emoji,
       'user_id', r.user_id,
-      'username', u.username
+      'user', jsonb_build_object(
+        'id', ru.id,
+        'username', ru.username,
+        'display_name', ru.display_name
+      )
     )) FILTER (WHERE r.id IS NOT NULL),
     '[]'
   ) AS reactions
@@ -129,17 +142,22 @@ LEFT JOIN message_attachments a
 LEFT JOIN message_reactions r 
   ON m.id = r.message_id
 
-LEFT JOIN users u 
-  ON r.user_id = u.id
+LEFT JOIN users ru 
+  ON r.user_id = ru.id
+
+LEFT JOIN users au
+  ON m.author_id = au.id
 
 WHERE ${conditions.join(" AND ")}
 
-GROUP BY m.id
-ORDER BY m.created_at DESC
+GROUP BY m.id, au.id
+ORDER BY m.created_at ASC
 LIMIT $${paramIndex};
 `;
 
   values.push(limit);
+
+  // print author id)
 
   console.log("QUERY:", query);
   console.log("VALUES:", values);
@@ -147,7 +165,7 @@ LIMIT $${paramIndex};
   return pool.query(query, values);
 };
 
-exports.updateMessage = async ({ channelId, messageId, content, deleteAttachmentIds = [], hasContent }) => {
+exports.updateMessage = async ({ channelId, messageId, userId, content, deleteAttachmentIds = [], hasContent }) => {
   const client = await pool.connect();
 
   try {
@@ -155,7 +173,7 @@ exports.updateMessage = async ({ channelId, messageId, content, deleteAttachment
 
     const existing = await client.query(
       `
-        SELECT id
+        SELECT id, author_id
         FROM messages
         WHERE id = $1 AND channel_id = $2
         LIMIT 1
@@ -166,6 +184,11 @@ exports.updateMessage = async ({ channelId, messageId, content, deleteAttachment
     if (existing.rowCount === 0) {
       await client.query("ROLLBACK");
       return null;
+    }
+
+    if (existing.rows[0].author_id !== userId) {
+      await client.query("ROLLBACK");
+      return { forbidden: true };
     }
 
     let messageResult;
@@ -220,7 +243,25 @@ exports.updateMessage = async ({ channelId, messageId, content, deleteAttachment
   }
 };
 
-exports.deleteMessage = async ({ channelId, messageId }) => {
+exports.deleteMessage = async ({ channelId, messageId, userId }) => {
+  const existing = await pool.query(
+    `
+      SELECT id, author_id, channel_id, content, created_at, edited_at
+      FROM messages
+      WHERE id = $1 AND channel_id = $2
+      LIMIT 1
+    `,
+    [messageId, channelId]
+  );
+
+  if (existing.rowCount === 0) {
+    return null;
+  }
+
+  if (existing.rows[0].author_id !== userId) {
+    return { forbidden: true };
+  }
+
   const result = await pool.query(
     `
       DELETE FROM messages
@@ -229,10 +270,6 @@ exports.deleteMessage = async ({ channelId, messageId }) => {
     `,
     [messageId, channelId]
   );
-
-  if (result.rowCount === 0) {
-    return null;
-  }
 
   return result.rows[0];
 };

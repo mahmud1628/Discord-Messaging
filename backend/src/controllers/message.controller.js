@@ -143,6 +143,7 @@ exports.removeReaction = async (req, res) => {
 // PIN MESSAGE
 exports.pinMessage = async (req, res) => {
   const { channelId, messageId } = req.params;
+  const userId = req.auth.userId;
   const pinnedBy = req.auth.userId;
 
   try {
@@ -243,6 +244,7 @@ exports.updateMessage = async (req, res) => {
     const result = await messageService.updateMessage({
       channelId,
       messageId,
+      userId,
       content,
       deleteAttachmentIds,
       hasContent,
@@ -250,6 +252,10 @@ exports.updateMessage = async (req, res) => {
 
     if (!result) {
       return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (result.forbidden) {
+      return res.status(403).json({ error: "Not allowed to edit this message" });
     }
 
     return res.json({
@@ -264,15 +270,21 @@ exports.updateMessage = async (req, res) => {
 
 exports.deleteMessage = async (req, res) => {
   const { channelId, messageId } = req.params;
+  const userId = req.auth.userId;
 
   try {
     const result = await messageService.deleteMessage({
       channelId,
       messageId,
+      userId,
     });
 
     if (!result) {
       return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (result.forbidden) {
+      return res.status(403).json({ error: "Not allowed to delete this message" });
     }
 
     return res.json({
