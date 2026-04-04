@@ -305,24 +305,32 @@ exports.deleteMessage = async ({ channelId, messageId, userId }) => {
 };
 
 //  ADD REACTION
-exports.addReaction = async ({ messageId, userId, emoji }) => {
+exports.addReaction = async ({ channelId, messageId, userId, emoji }) => {
   const query = `
     INSERT INTO message_reactions (message_id, user_id, emoji)
-    VALUES ($1, $2, $3)
+    SELECT m.id, $2, $3
+    FROM messages m
+    WHERE m.id = $1
+      AND m.channel_id = $4
     ON CONFLICT DO NOTHING
   `;
 
-  return pool.query(query, [messageId, userId, emoji]);
+  return pool.query(query, [messageId, userId, emoji, channelId]);
 };
 
 // REMOVE REACTION
-exports.removeReaction = async ({ messageId, userId, emoji }) => {
+exports.removeReaction = async ({ channelId, messageId, userId, emoji }) => {
   const query = `
-    DELETE FROM message_reactions
-    WHERE message_id = $1 AND user_id = $2 AND emoji = $3
+    DELETE FROM message_reactions mr
+    USING messages m
+    WHERE mr.message_id = $1
+      AND mr.user_id = $2
+      AND mr.emoji = $3
+      AND mr.message_id = m.id
+      AND m.channel_id = $4
   `;
 
-  return pool.query(query, [messageId, userId, emoji]);
+  return pool.query(query, [messageId, userId, emoji, channelId]);
 };
 
 // PIN MESSAGE

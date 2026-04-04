@@ -140,15 +140,40 @@ exports.listMessages = async (req, res) => {
 
 //  ADD REACTION
 exports.addReaction = async (req, res) => {
+  const { channelId } = req.params;
   const { messageId, emoji } = req.params;
   const userId = req.auth.userId;
+  const username = req.auth.username;
 
   try {
-    await messageService.addReaction({ messageId, userId, emoji });
+    const result = await messageService.addReaction({
+      channelId,
+      messageId,
+      userId,
+      emoji,
+    });
+
+    if (result.rowCount > 0) {
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`channel:${channelId}`).emit("message:reaction:add", {
+            messageId,
+            emoji,
+            user: {
+              id: userId,
+              username,
+            },
+          });
+        }
+      } catch (socketError) {
+        console.error("[WS] message:reaction:add emit error", socketError);
+      }
+    }
 
     res.json({
       success: true,
-      message: "Reaction added",
+      message: result.rowCount > 0 ? "Reaction added" : "Reaction already exists",
     });
   } catch (err) {
     console.error(err);
@@ -158,15 +183,40 @@ exports.addReaction = async (req, res) => {
 
 // REMOVE REACTION
 exports.removeReaction = async (req, res) => {
+  const { channelId } = req.params;
   const { messageId, emoji } = req.params;
   const userId = req.auth.userId;
+  const username = req.auth.username;
 
   try {
-    await messageService.removeReaction({ messageId, userId, emoji });
+    const result = await messageService.removeReaction({
+      channelId,
+      messageId,
+      userId,
+      emoji,
+    });
+
+    if (result.rowCount > 0) {
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`channel:${channelId}`).emit("message:reaction:remove", {
+            messageId,
+            emoji,
+            user: {
+              id: userId,
+              username,
+            },
+          });
+        }
+      } catch (socketError) {
+        console.error("[WS] message:reaction:remove emit error", socketError);
+      }
+    }
 
     res.json({
       success: true,
-      message: "Reaction removed",
+      message: result.rowCount > 0 ? "Reaction removed" : "Reaction not found",
     });
   } catch (err) {
     console.error(err);
