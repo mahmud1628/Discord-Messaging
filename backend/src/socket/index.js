@@ -5,10 +5,16 @@ const authModel = require('../models/auth.model');
 const { setIO } = require('./io');
 
 const initSocket = (server) => {
+  const allowedOrigins = (env.corsOrigin || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   const io = new Server(server, {
     cors: {
-      origin: env.corsOrigin,
+      origin: allowedOrigins.length ? allowedOrigins : true,
       methods: ['GET', 'POST'],
+      credentials: true,
     },
   });
 

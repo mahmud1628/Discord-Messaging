@@ -29,6 +29,6 @@ services:
     plan: free
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://your-backend-service.onrender.com/api/v1
+        value: https://discord-backend-rweo.onrender.com/api/v1
       - key: VITE_SOCKET_URL
-        value: https://your-backend-service.onrender.com
+        value: https://discord-backend-rweo.onrender.com
