@@ -59,6 +59,36 @@ exports.insertMessageAttachment = async (
   );
 };
 
+exports.findAttachmentForAuthenticatedUser = async ({
+  serverId,
+  channelId,
+  attachmentId,
+  userId,
+}) => {
+  return pool.query(
+    `
+      SELECT
+        a.id,
+        a.file_url,
+        a.file_name,
+        a.mime_type
+      FROM message_attachments a
+      INNER JOIN messages m ON m.id = a.message_id
+      INNER JOIN channels c ON c.id = m.channel_id
+      WHERE a.id = $1
+        AND m.channel_id = $2
+        AND c.server_id = $3
+        AND EXISTS (
+          SELECT 1
+          FROM users u
+          WHERE u.id = $4
+        )
+      LIMIT 1
+    `,
+    [attachmentId, channelId, serverId, userId]
+  );
+};
+
 exports.deleteMessageById = async (messageId, client = pool) => {
   return runQuery(
     client,

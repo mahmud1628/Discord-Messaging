@@ -17,6 +17,22 @@ const buildAttachmentPath = ({ messageId, originalname }) => {
   return `messages/${messageId}/${timestamp}-${sanitizeFileName(originalname)}`;
 };
 
+const extractStoragePathFromPublicUrl = (fileUrl) => {
+  try {
+    const parsedUrl = new URL(fileUrl);
+    const publicPrefix = `/storage/v1/object/public/${env.supabaseStorageBucket}/`;
+    const pathName = parsedUrl.pathname || "";
+
+    if (!pathName.startsWith(publicPrefix)) {
+      return null;
+    }
+
+    return decodeURIComponent(pathName.slice(publicPrefix.length));
+  } catch {
+    return null;
+  }
+};
+
 const deleteUploadedFile = async (filePath) => {
   try {
     const supabase = getSupabaseClient();
@@ -135,6 +151,53 @@ exports.sendMessageWithAttachment = async ({ serverId, channelId, authorId, cont
   } finally {
     client.release();
   }
+};
+
+exports.getAttachmentDownloadUrlForAuthenticatedUser = async ({
+  serverId,
+  channelId,
+  attachmentId,
+  userId,
+}) => {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey || !env.supabaseStorageBucket) {
+    throw createHttpError(
+      500,
+      "Supabase configuration is missing. Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_STORAGE_BUCKET."
+    );
+  }
+
+  const attachmentResult = await messageModel.findAttachmentForAuthenticatedUser({
+    serverId,
+    channelId,
+    attachmentId,
+    userId,
+  });
+
+  if (attachmentResult.rowCount === 0) {
+    throw createHttpError(404, "Attachment not found for this user");
+  }
+
+  const attachment = attachmentResult.rows[0];
+  const storagePath = extractStoragePathFromPublicUrl(attachment.file_url);
+
+  if (!storagePath) {
+    throw createHttpError(500, "Invalid attachment storage path");
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.storage
+    .from(env.supabaseStorageBucket)
+    .createSignedUrl(storagePath, 60, {
+      download: attachment.file_name || undefined,
+    });
+
+  if (error || !data?.signedUrl) {
+    throw createHttpError(500, error?.message || "Failed to generate attachment download URL");
+  }
+
+  return {
+    signedUrl: data.signedUrl,
+  };
 };
 
 exports.listMessages = async ({ serverId, channelId, before, after, limit }) => {

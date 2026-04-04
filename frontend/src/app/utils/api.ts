@@ -280,6 +280,20 @@ export const sendMessageToChannel = async (options: {
   );
 };
 
+export const getAttachmentDownloadUrl = async (options: {
+  serverId: string;
+  channelId: string;
+  attachmentId: string;
+  token: string;
+}) => {
+  const { serverId, channelId, attachmentId, token } = options;
+
+  return apiRequest<{ downloadUrl: string }>(
+    `/servers/${serverId}/channels/${channelId}/messages/attachments/${attachmentId}/download-url`,
+    { token }
+  );
+};
+
 export const updateMessageContent = async (options: {
   serverId: string;
   channelId: string;

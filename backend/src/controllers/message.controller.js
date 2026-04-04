@@ -296,3 +296,29 @@ exports.deleteMessage = async (req, res) => {
     return res.status(500).json({ error: "Database error" });
   }
 };
+
+exports.getAttachmentDownloadUrl = async (req, res) => {
+  const { serverId, channelId, attachmentId } = req.params;
+  const userId = req.auth.userId;
+
+  try {
+    const result = await messageService.getAttachmentDownloadUrlForAuthenticatedUser({
+      serverId,
+      channelId,
+      attachmentId,
+      userId,
+    });
+
+    return res.json({
+      downloadUrl: result.signedUrl,
+    });
+  } catch (err) {
+    console.error(err);
+
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+
+    return res.status(500).json({ error: "Failed to get attachment download URL" });
+  }
+};

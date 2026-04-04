@@ -7,6 +7,7 @@ const {
   pinMessage,
   unpinMessage,
   getPinnedMessages,
+  getAttachmentDownloadUrl,
 } = require("../controllers/message.controller");
 const { uploadMessageAttachments } = require("../middlewares/messageUpload");
 
@@ -42,6 +43,7 @@ router.put("/:messageId/reactions/:emoji", addReaction);
 
 // REMOVE REACTION
 router.delete("/:messageId/reactions/:emoji", removeReaction);
+router.get("/attachments/:attachmentId/download-url", getAttachmentDownloadUrl);
 router.put("/:messageId", updateMessage);
 router.delete("/:messageId", deleteMessage);
 

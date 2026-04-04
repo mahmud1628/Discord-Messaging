@@ -39,6 +39,7 @@ import { EditMessageDialog } from "./EditMessageDialog";
 import { EmojiPicker } from "./EmojiPicker";
 import { UserProfilePopover } from "../user/UserProfilePopover";
 import { toast } from "sonner";
+import { getAttachmentDownloadUrl } from "../../utils/api";
 
 interface MessageItemProps {
   message: Message;
@@ -50,8 +51,9 @@ export function MessageItem({ message }: MessageItemProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const { users, deleteMessage, togglePin, toggleReaction } = useApp();
-  const { user: authUser } = useAuth();
+  const { users, deleteMessage, togglePin, toggleReaction, selectedServerId, selectedChannelId } =
+    useApp();
+  const { user: authUser, token } = useAuth();
 
   const messageUser = users.find((u) => u.id === message.userId);
   const currentUserId = authUser?.id || "user-1";
@@ -92,6 +94,26 @@ export function MessageItem({ message }: MessageItemProps) {
       await toggleReaction(message.id, emoji, currentUserId);
     } catch (error) {
       toast.error("Failed to toggle reaction");
+    }
+  };
+
+  const handleAttachmentDownload = async (attachmentId: string) => {
+    if (!selectedServerId || !selectedChannelId || !token) {
+      toast.error("Missing context for attachment download");
+      return;
+    }
+
+    try {
+      const { downloadUrl } = await getAttachmentDownloadUrl({
+        serverId: selectedServerId,
+        channelId: selectedChannelId,
+        attachmentId,
+        token,
+      });
+
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      toast.error("Failed to download attachment");
     }
   };
 
@@ -155,11 +177,10 @@ export function MessageItem({ message }: MessageItemProps) {
               {message.attachments && message.attachments.length > 0 && (
                 <div className="mt-2 space-y-2">
                   {message.attachments.map((attachment) => (
-                    <a
+                    <button
+                      type="button"
                       key={attachment.id}
-                      href={attachment.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
+                      onClick={() => handleAttachmentDownload(attachment.id)}
                       className="flex max-w-[380px] items-center gap-3 rounded-lg border border-[#1e1f22] bg-[#1f2024] px-3 py-2 transition-colors hover:border-[#5865f2]/60"
                     >
                       <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#2b2d31] text-[#b5bac1]">
@@ -171,7 +192,7 @@ export function MessageItem({ message }: MessageItemProps) {
                         </p>
                         <p className="text-xs text-[#949ba4]">Attachment</p>
                       </div>
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
