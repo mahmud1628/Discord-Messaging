@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: discord-backend
+    env: docker
+    rootDir: backend
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: CORS_ORIGIN
+        value: https://your-frontend.onrender.com
+      - key: DATABASE_URL
+        value: <supabase-url>
+      - key: JWT_SECRET
+        value: <jwt-secret>
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: SUPABASE_URL
+        value: <supabase-url>
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: <supabase-service-role-key>
+      - key: SUPABASE_STORAGE_BUCKET
+        value: <supabase-bucket>
+
+  - type: web
+    name: discord-frontend
+    env: docker
+    rootDir: frontend
+    plan: free
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://your-backend.onrender.com/api/v1
+      - key: VITE_SOCKET_URL
+        value: https://your-backend.onrender.com
