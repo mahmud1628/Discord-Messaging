@@ -82,7 +82,7 @@ exports.sendMessage = async (req, res) => {
             attachments: file
               ? [
                   {
-                    id: "uploaded",
+                    id: result.id,
                     file_url: result.file_url,
                     file_name: result.file_name,
                     file_size: result.file_size,

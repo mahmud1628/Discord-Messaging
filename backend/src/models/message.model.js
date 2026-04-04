@@ -127,62 +127,66 @@ exports.listMessages = async ({ channelId, before, after, limit = 50 }) => {
   }
 
   const query = `
-SELECT 
-  m.id,
-  m.channel_id,
-  m.author_id,
-  m.content,
-  m.created_at,
-  m.edited_at,
+SELECT *
+FROM (
+  SELECT 
+    m.id,
+    m.channel_id,
+    m.author_id,
+    m.content,
+    m.created_at,
+    m.edited_at,
 
-  jsonb_build_object(
-    'id', au.id,
-    'username', au.username,
-    'display_name', au.display_name
-  ) AS author,
+    jsonb_build_object(
+      'id', au.id,
+      'username', au.username,
+      'display_name', au.display_name
+    ) AS author,
 
-  COALESCE(
-    json_agg(DISTINCT jsonb_build_object(
-      'id', a.id,
-      'file_url', a.file_url,
-      'file_name', a.file_name
-    )) FILTER (WHERE a.id IS NOT NULL),
-    '[]'
-  ) AS attachments,
+    COALESCE(
+      json_agg(DISTINCT jsonb_build_object(
+        'id', a.id,
+        'file_url', a.file_url,
+        'file_name', a.file_name
+      )) FILTER (WHERE a.id IS NOT NULL),
+      '[]'
+    ) AS attachments,
 
-  COALESCE(
-    json_agg(DISTINCT jsonb_build_object(
-      'id', r.id,
-      'emoji', r.emoji,
-      'user_id', r.user_id,
-      'user', jsonb_build_object(
-        'id', ru.id,
-        'username', ru.username,
-        'display_name', ru.display_name
-      )
-    )) FILTER (WHERE r.id IS NOT NULL),
-    '[]'
-  ) AS reactions
+    COALESCE(
+      json_agg(DISTINCT jsonb_build_object(
+        'id', r.id,
+        'emoji', r.emoji,
+        'user_id', r.user_id,
+        'user', jsonb_build_object(
+          'id', ru.id,
+          'username', ru.username,
+          'display_name', ru.display_name
+        )
+      )) FILTER (WHERE r.id IS NOT NULL),
+      '[]'
+    ) AS reactions
 
-FROM messages m
+  FROM messages m
 
-LEFT JOIN message_attachments a 
-  ON m.id = a.message_id
+  LEFT JOIN message_attachments a 
+    ON m.id = a.message_id
 
-LEFT JOIN message_reactions r 
-  ON m.id = r.message_id
+  LEFT JOIN message_reactions r 
+    ON m.id = r.message_id
 
-LEFT JOIN users ru 
-  ON r.user_id = ru.id
+  LEFT JOIN users ru 
+    ON r.user_id = ru.id
 
-LEFT JOIN users au
-  ON m.author_id = au.id
+  LEFT JOIN users au
+    ON m.author_id = au.id
 
-WHERE ${conditions.join(" AND ")}
+  WHERE ${conditions.join(" AND ")}
 
-GROUP BY m.id, au.id
-ORDER BY m.created_at ASC
-LIMIT $${paramIndex};
+  GROUP BY m.id, au.id
+  ORDER BY m.created_at DESC
+  LIMIT $${paramIndex}
+) recent
+ORDER BY recent.created_at ASC;
 `;
 
   values.push(limit);
