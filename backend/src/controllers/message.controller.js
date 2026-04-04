@@ -227,8 +227,8 @@ exports.removeReaction = async (req, res) => {
 // PIN MESSAGE
 exports.pinMessage = async (req, res) => {
   const { channelId, messageId } = req.params;
-  const userId = req.auth.userId;
   const pinnedBy = req.auth.userId;
+  const pinnedByUsername = req.auth.username;
 
   try {
     const result = await messageService.pinMessage({
@@ -239,6 +239,22 @@ exports.pinMessage = async (req, res) => {
 
     if (result.rowCount === 0) {
       return res.status(409).json({ error: "Message is already pinned" });
+    }
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`channel:${channelId}`).emit("message:pinned", {
+          messageId,
+          channelId,
+          pinned: true,
+          pinnedAt: result.rows[0].pinned_at,
+          pinnedBy,
+          pinnedByUsername,
+        });
+      }
+    } catch (socketError) {
+      console.error("[WS] message:pinned emit error", socketError);
     }
 
     res.status(201).json({
@@ -255,12 +271,27 @@ exports.pinMessage = async (req, res) => {
 // UNPIN MESSAGE
 exports.unpinMessage = async (req, res) => {
   const { channelId, messageId } = req.params;
+  const unpinnedBy = req.auth.userId;
 
   try {
     const result = await messageService.unpinMessage({ messageId, channelId });
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Pinned message not found" });
+    }
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`channel:${channelId}`).emit("message:unpinned", {
+          messageId,
+          channelId,
+          pinned: false,
+          unpinnedBy,
+        });
+      }
+    } catch (socketError) {
+      console.error("[WS] message:unpinned emit error", socketError);
     }
 
     res.json({

@@ -200,6 +200,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const applyPinMutation = (
+    prevMessages: Message[],
+    messageId: string,
+    pinned: boolean
+  ) => {
+    return prevMessages.map((msg) =>
+      msg.id === messageId ? { ...msg, pinned } : msg
+    );
+  };
+
   useEffect(() => {
     if (!isAuthenticated || !token) {
       setSocket((prev) => {
@@ -428,11 +438,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMessages((prev) => prev.filter((msg) => msg.id !== String(payload.messageId)));
     };
 
+    const handleMessagePinned = (payload: {
+      messageId: string | number;
+      channelId: string | number;
+      pinned?: boolean;
+      pinnedAt?: string;
+      pinnedBy?: string | number;
+      pinnedByUsername?: string;
+    }) => {
+      const incomingChannelId = String(payload.channelId);
+
+      if (!selectedChannelId || incomingChannelId !== selectedChannelId) {
+        return;
+      }
+
+      setMessages((prev) =>
+        applyPinMutation(prev, String(payload.messageId), payload.pinned !== false)
+      );
+    };
+
+    const handleMessageUnpinned = (payload: {
+      messageId: string | number;
+      channelId: string | number;
+      pinned?: boolean;
+      unpinnedBy?: string | number;
+    }) => {
+      const incomingChannelId = String(payload.channelId);
+
+      if (!selectedChannelId || incomingChannelId !== selectedChannelId) {
+        return;
+      }
+
+      setMessages((prev) =>
+        applyPinMutation(prev, String(payload.messageId), Boolean(payload.pinned))
+      );
+    };
+
     socket.on("message:new", handleMessageNew);
     socket.on("message:reaction:add", handleReactionAdd);
     socket.on("message:reaction:remove", handleReactionRemove);
     socket.on("message:updated", handleMessageUpdated);
     socket.on("message:deleted", handleMessageDeleted);
+    socket.on("message:pinned", handleMessagePinned);
+    socket.on("message:unpinned", handleMessageUnpinned);
 
     return () => {
       socket.off("message:new", handleMessageNew);
@@ -440,6 +488,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       socket.off("message:reaction:remove", handleReactionRemove);
       socket.off("message:updated", handleMessageUpdated);
       socket.off("message:deleted", handleMessageDeleted);
+      socket.off("message:pinned", handleMessagePinned);
+      socket.off("message:unpinned", handleMessageUnpinned);
     };
   }, [socket, selectedChannelId, user]);
 
@@ -817,6 +867,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         messageId,
         token,
       });
+
+      setMessages((prev) => applyPinMutation(prev, messageId, false));
     } else {
       await pinMessage({
         serverId: selectedServerId,
@@ -824,11 +876,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         messageId,
         token,
       });
-    }
 
-    setMessages((prev) =>
-      prev.map((msg) => (msg.id === messageId ? { ...msg, pinned: !msg.pinned } : msg))
-    );
+      setMessages((prev) => applyPinMutation(prev, messageId, true));
+    }
   };
 
   return (
