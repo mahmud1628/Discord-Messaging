@@ -450,7 +450,10 @@ export function MessageItem({ message }: MessageItemProps) {
           {/* Emoji Picker */}
           {showEmojiPicker && (
             <div className="absolute top-0 right-16 z-10">
-              <EmojiPicker onSelect={handleReaction} onClose={() => setShowEmojiPicker(false)} />
+              <EmojiPicker
+                onSelectEmoji={handleReaction}
+                onClose={() => setShowEmojiPicker(false)}
+              />
             </div>
           )}
         </motion.div>
