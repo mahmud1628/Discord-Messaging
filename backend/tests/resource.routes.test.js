@@ -130,6 +130,19 @@ describe('Servers, channels, and messages endpoints', () => {
     });
   });
 
+  it('DELETE /api/v1/servers/:serverId/channels/:channelId/messages/:messageId/reactions/:emoji should remove reaction', async () => {
+    messageService.removeReaction.mockResolvedValue({ rowCount: 1 });
+
+    const response = await request(app)
+      .delete('/api/v1/servers/1/channels/12/messages/50/reactions/%F0%9F%91%8D');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Reaction removed',
+    });
+  });
+
   it('PUT /api/v1/servers/:serverId/channels/:channelId/messages/:messageId/pin should pin message', async () => {
     messageService.pinMessage.mockResolvedValue({
       rowCount: 1,
@@ -159,6 +172,18 @@ describe('Servers, channels, and messages endpoints', () => {
     });
   });
 
+  it('DELETE /api/v1/servers/:serverId/channels/:channelId/messages/:messageId/pin should unpin message', async () => {
+    messageService.unpinMessage.mockResolvedValue({ rowCount: 1 });
+
+    const response = await request(app).delete('/api/v1/servers/1/channels/12/messages/50/pin');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Message unpinned',
+    });
+  });
+
   it('PUT /api/v1/servers/:serverId/channels/:channelId/messages/:messageId should validate empty update payload', async () => {
     const response = await request(app)
       .put('/api/v1/servers/1/channels/12/messages/50')
@@ -166,6 +191,54 @@ describe('Servers, channels, and messages endpoints', () => {
 
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ error: 'Nothing to update' });
+  });
+
+  it('PUT /api/v1/servers/:serverId/channels/:channelId/messages/:messageId should validate mutually exclusive payload', async () => {
+    const response = await request(app)
+      .put('/api/v1/servers/1/channels/12/messages/50')
+      .send({ content: 'edited', deleteAttachmentIds: ['a1'] });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      error: 'Update content or delete attachments, not both',
+    });
+  });
+
+  it('PUT /api/v1/servers/:serverId/channels/:channelId/messages/:messageId should return 403 when editing forbidden', async () => {
+    messageService.updateMessage.mockResolvedValue({ forbidden: true });
+
+    const response = await request(app)
+      .put('/api/v1/servers/1/channels/12/messages/50')
+      .send({ content: 'edited' });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: 'Not allowed to edit this message' });
+  });
+
+  it('PUT /api/v1/servers/:serverId/channels/:channelId/messages/:messageId should return updated message payload', async () => {
+    messageService.updateMessage.mockResolvedValue({
+      message: {
+        id: 50,
+        channel_id: 12,
+        content: 'edited',
+        edited_at: '2026-01-01T00:00:00.000Z',
+      },
+      deletedAttachmentIds: [],
+    });
+
+    const response = await request(app)
+      .put('/api/v1/servers/1/channels/12/messages/50')
+      .send({ content: 'edited' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      message: {
+        id: 50,
+        channel_id: 12,
+        content: 'edited',
+      },
+      deletedAttachmentIds: [],
+    });
   });
 
   it('DELETE /api/v1/servers/:serverId/channels/:channelId/messages/:messageId should return deleted payload', async () => {
@@ -193,5 +266,27 @@ describe('Servers, channels, and messages endpoints', () => {
     expect(response.body).toMatchObject({
       downloadUrl: 'https://example.com/signed-url',
     });
+  });
+
+  it('GET /api/v1/servers/:serverId/channels/:channelId/messages/attachments/:attachmentId/download-url should forward service status errors', async () => {
+    const error = new Error('Attachment not found for this user');
+    error.statusCode = 404;
+    messageService.getAttachmentDownloadUrlForAuthenticatedUser.mockRejectedValue(error);
+
+    const response = await request(app).get(
+      '/api/v1/servers/1/channels/12/messages/attachments/missing/download-url'
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.body).toMatchObject({ error: 'Attachment not found for this user' });
+  });
+
+  it('GET /api/v1/servers should return 500 on service error', async () => {
+    serverService.listServers.mockRejectedValue(new Error('db down'));
+
+    const response = await request(app).get('/api/v1/servers');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({ error: 'Database error' });
   });
 });
