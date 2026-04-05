@@ -7,6 +7,7 @@ import {
   getChannelsByServer,
   getMessagesByChannel,
   getPinnedMessages,
+  getServerMembers,
   getServers,
   MessageApiItem,
   MessageReactionApiItem,
@@ -87,31 +88,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Mock data
-const mockUsers: UserProfile[] = [
-  {
-    id: "user-1",
-    username: "john_doe",
-    displayName: "John Doe",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=john",
-    status: "online",
-  },
-  {
-    id: "user-2",
-    username: "jane_smith",
-    displayName: "Jane Smith",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=jane",
-    status: "online",
-  },
-  {
-    id: "user-3",
-    username: "bob_wilson",
-    displayName: "Bob Wilson",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=bob",
-    status: "away",
-  },
-];
-
 const SERVER_COLORS = ["#5865F2", "#57F287", "#FEE75C", "#EB459E", "#ED4245", "#3BA55D"];
 
 const getServerColor = (serverId: string) => {
@@ -130,10 +106,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [servers, setServers] = useState<Server[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [users, setUsers] = useState<UserProfile[]>(mockUsers);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [socket, setSocket] = useState<AppSocket | null>(null);
+
+  const isAttachmentPlaceholderContent = (value?: string) => {
+    if (!value) return false;
+    return /^\[\d+ attachments?\]$/i.test(value.trim());
+  };
 
   const applyReactionMutation = (
     prevMessages: Message[],
@@ -272,7 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const mappedMessage: Message = {
         id: String(incoming.id),
         content: incoming.content,
-        userId: String(incoming.author?.id ?? user?.id ?? mockUsers[0].id),
+        userId: String(incoming.author?.id ?? user?.id ?? "unknown-user"),
         channelId: incomingChannelId,
         createdAt: incoming.createdAt,
         edited: false,
@@ -312,7 +294,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               username: incomingAuthorUsername,
               displayName: incomingAuthorUsername,
               avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${incomingAuthorUsername}`,
-              status: "online",
             },
             ...prev,
           ];
@@ -358,7 +339,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               username: incomingReactorUsername,
               displayName: incomingReactorUsername,
               avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${incomingReactorUsername}`,
-              status: "online",
             },
             ...prev,
           ];
@@ -403,8 +383,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id !== String(payload.messageId)) return msg;
+        prev.reduce<Message[]>((acc, msg) => {
+          if (msg.id !== String(payload.messageId)) {
+            acc.push(msg);
+            return acc;
+          }
 
           const removed = new Set(
             (payload.deletedAttachmentIds || []).map((id) => String(id))
@@ -413,14 +396,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? (msg.attachments || []).filter((attachment) => !removed.has(attachment.id))
             : msg.attachments;
 
-          return {
+          const nextContent = payload.content ?? msg.content;
+          const shouldDropPlaceholderOnlyMessage =
+            (remainingAttachments?.length || 0) === 0 &&
+            isAttachmentPlaceholderContent(nextContent);
+
+          if (shouldDropPlaceholderOnlyMessage) {
+            return acc;
+          }
+
+          acc.push({
             ...msg,
-            content: payload.content ?? msg.content,
+            content: nextContent,
             edited: true,
             updatedAt: payload.editedAt ?? msg.updatedAt,
             attachments: remainingAttachments,
-          };
-        })
+          });
+
+          return acc;
+        }, [])
       );
     };
 
@@ -474,6 +468,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
     };
 
+    const handlePresenceState = (payload: { onlineUserIds?: Array<string | number> }) => {
+      const ids = new Set((payload.onlineUserIds || []).map((id) => String(id)));
+      setOnlineUserIds(ids);
+    };
+
+    const handlePresenceUpdate = (payload: {
+      userId?: string | number;
+      status?: "online" | "offline";
+    }) => {
+      if (!payload.userId || !payload.status) return;
+
+      const userId = String(payload.userId);
+      setOnlineUserIds((prev) => {
+        const next = new Set(prev);
+        if (payload.status === "online") {
+          next.add(userId);
+        } else {
+          next.delete(userId);
+        }
+        return next;
+      });
+    };
+
     socket.on("message:new", handleMessageNew);
     socket.on("message:reaction:add", handleReactionAdd);
     socket.on("message:reaction:remove", handleReactionRemove);
@@ -481,6 +498,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     socket.on("message:deleted", handleMessageDeleted);
     socket.on("message:pinned", handleMessagePinned);
     socket.on("message:unpinned", handleMessageUnpinned);
+    socket.on("presence:state", handlePresenceState);
+    socket.on("presence:update", handlePresenceUpdate);
 
     return () => {
       socket.off("message:new", handleMessageNew);
@@ -490,29 +509,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       socket.off("message:deleted", handleMessageDeleted);
       socket.off("message:pinned", handleMessagePinned);
       socket.off("message:unpinned", handleMessageUnpinned);
+      socket.off("presence:state", handlePresenceState);
+      socket.off("presence:update", handlePresenceUpdate);
     };
   }, [socket, selectedChannelId, user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    setUsers((prev) => {
-      if (prev.some((entry) => entry.id === user.id)) {
-        return prev;
-      }
-
-      return [
-        {
-          id: user.id,
-          username: user.username,
-          displayName: user.displayName,
-          avatar: user.avatar,
-          status: "online",
-        },
-        ...prev,
-      ];
-    });
-  }, [user]);
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
@@ -566,6 +566,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     loadServersAndChannels();
   }, [isAuthenticated, token]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !token || !selectedServerId) {
+      setUsers([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadServerMembers = async () => {
+      try {
+        const response = await getServerMembers(selectedServerId, token);
+
+        const mappedMembers: UserProfile[] = response.members.map((member) => ({
+          id: String(member.id),
+          username: member.username,
+          displayName: member.display_name || member.username,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.username}`,
+        }));
+
+        if (user && !mappedMembers.some((entry) => entry.id === user.id)) {
+          mappedMembers.unshift({
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            avatar: user.avatar,
+          });
+        }
+
+        if (!cancelled) {
+          setUsers(mappedMembers);
+        }
+      } catch (error) {
+        console.error("Failed to load server members", error);
+        if (!cancelled) {
+          setUsers([]);
+        }
+      }
+    };
+
+    loadServerMembers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, token, selectedServerId, user]);
 
   useEffect(() => {
     if (!isAuthenticated || !token || !selectedServerId || !selectedChannelId) {
@@ -623,7 +669,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           getPinnedMessages(selectedServerId, selectedChannelId, token),
         ]);
 
-        const fallbackUserId = user?.id ?? mockUsers[0].id;
+        const fallbackUserId = user?.id ?? "unknown-user";
         const pinnedIds = new Set(
           pinnedResponse.pinnedMessages.map((pinned) => String(pinned.id))
         );
@@ -642,7 +688,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               username: message.author.username,
               displayName: message.author.display_name || message.author.username,
               avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.author.username}`,
-              status: "online",
             });
           }
 
@@ -654,7 +699,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               username: reaction.user.username,
               displayName: reaction.user.display_name || reaction.user.username,
               avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${reaction.user.username}`,
-              status: "online",
             });
           });
         });
@@ -695,6 +739,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [messages, selectedChannelId]
   );
 
+  const usersWithPresence = useMemo(
+    (): UserProfile[] =>
+      users.map((entry) => ({
+        ...entry,
+        status: (onlineUserIds.has(entry.id) ? "online" : "offline") as
+          | "online"
+          | "offline",
+      })),
+    [users, onlineUserIds]
+  );
+
   const setSelectedServer = (serverId: string) => {
     setSelectedServerId(serverId);
   };
@@ -716,7 +771,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       attachments,
     });
 
-    const fallbackUserId = user?.id ?? mockUsers[0].id;
+    const fallbackUserId = user?.id ?? "unknown-user";
     const newMessage: Message = {
       id: String(response.message.id),
       content: response.message.content,
@@ -792,16 +847,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     setMessages((prev) =>
-      prev.map((msg) => {
-        if (msg.id !== messageId) return msg;
+      prev.reduce<Message[]>((acc, msg) => {
+        if (msg.id !== messageId) {
+          acc.push(msg);
+          return acc;
+        }
 
         const removed = new Set(response.deletedAttachmentIds || attachmentIds);
         const remaining = (msg.attachments || []).filter(
           (attachment) => !removed.has(attachment.id)
         );
 
-        return { ...msg, attachments: remaining };
-      })
+        const shouldDropPlaceholderOnlyMessage =
+          remaining.length === 0 && isAttachmentPlaceholderContent(msg.content);
+
+        if (shouldDropPlaceholderOnlyMessage) {
+          return acc;
+        }
+
+        acc.push({ ...msg, attachments: remaining });
+        return acc;
+      }, [])
     );
   };
 
@@ -887,7 +953,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         servers,
         channels,
         messages,
-        users,
+        users: usersWithPresence,
         selectedServerId,
         selectedChannelId,
         pinnedMessages,

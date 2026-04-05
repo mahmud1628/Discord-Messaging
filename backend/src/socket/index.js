@@ -4,6 +4,13 @@ const env = require('../config/env');
 const authModel = require('../models/auth.model');
 const { setIO } = require('./io');
 
+const onlineUsers = new Map();
+
+const getOnlineUserIds = () =>
+  Array.from(onlineUsers.entries())
+    .filter(([, count]) => count > 0)
+    .map(([userId]) => userId);
+
 const initSocket = (server) => {
   const allowedOrigins = (env.corsOrigin || '')
     .split(',')
@@ -63,6 +70,21 @@ const initSocket = (server) => {
 
   // ── Connection ───────────────────────────────────────────────
   io.on('connection', (socket) => {
+    const userId = String(socket.user.userId);
+    const nextCount = (onlineUsers.get(userId) || 0) + 1;
+    onlineUsers.set(userId, nextCount);
+
+    socket.emit('presence:state', {
+      onlineUserIds: getOnlineUserIds(),
+    });
+
+    if (nextCount === 1) {
+      io.emit('presence:update', {
+        userId,
+        status: 'online',
+      });
+    }
+
     // console.log(`[WS] Connected: ${socket.user.username} (${socket.id})`);
 
     // Client must emit channel:join after connecting to receive channel events.
@@ -78,6 +100,18 @@ const initSocket = (server) => {
     });
 
     socket.on('disconnect', (reason) => {
+      const currentCount = onlineUsers.get(userId) || 0;
+
+      if (currentCount <= 1) {
+        onlineUsers.delete(userId);
+        io.emit('presence:update', {
+          userId,
+          status: 'offline',
+        });
+      } else {
+        onlineUsers.set(userId, currentCount - 1);
+      }
+
       // console.log(`[WS] Disconnected: ${socket.user.username} — ${reason}`);
     });
   });

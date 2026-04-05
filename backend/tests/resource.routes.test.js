@@ -14,6 +14,7 @@ jest.mock('../src/middlewares/authenticate', () => ({
 
 jest.mock('../src/services/server.service', () => ({
   listServers: jest.fn(),
+  listServerMembers: jest.fn(),
 }));
 
 jest.mock('../src/services/channel.service', () => ({
@@ -56,6 +57,27 @@ describe('Servers, channels, and messages endpoints', () => {
       servers: [{ id: 1, name: 'General Server' }],
       count: 1,
     });
+  });
+
+  it('GET /api/v1/servers/:serverId/members should return member list', async () => {
+    serverService.listServerMembers.mockResolvedValue({
+      rows: [
+        { id: 101, username: 'tester', display_name: 'Test User' },
+        { id: 202, username: 'alice', display_name: 'Alice' },
+      ],
+    });
+
+    const response = await request(app).get('/api/v1/servers/1/members');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      members: [
+        { id: 101, username: 'tester', display_name: 'Test User' },
+        { id: 202, username: 'alice', display_name: 'Alice' },
+      ],
+      count: 2,
+    });
+    expect(serverService.listServerMembers).toHaveBeenCalledWith('1');
   });
 
   it('GET /api/v1/servers/:serverId/channels should return channel list', async () => {
@@ -285,6 +307,15 @@ describe('Servers, channels, and messages endpoints', () => {
     serverService.listServers.mockRejectedValue(new Error('db down'));
 
     const response = await request(app).get('/api/v1/servers');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({ error: 'Database error' });
+  });
+
+  it('GET /api/v1/servers/:serverId/members should return 500 on service error', async () => {
+    serverService.listServerMembers.mockRejectedValue(new Error('db down'));
+
+    const response = await request(app).get('/api/v1/servers/1/members');
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({ error: 'Database error' });

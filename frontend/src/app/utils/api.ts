@@ -134,6 +134,17 @@ interface ServersApiResponse {
   count: number;
 }
 
+export interface ServerMemberApiItem {
+  id: string | number;
+  username: string;
+  display_name?: string | null;
+}
+
+interface ServerMembersApiResponse {
+  members: ServerMemberApiItem[];
+  count: number;
+}
+
 export interface ChannelApiItem {
   id: string | number;
   server_id: string | number;
@@ -236,6 +247,10 @@ export const getServers = async (token: string) => {
 
 export const getChannelsByServer = async (serverId: string, token: string) => {
   return apiRequest<ChannelsApiResponse>(`/servers/${serverId}/channels`, { token });
+};
+
+export const getServerMembers = async (serverId: string, token: string) => {
+  return apiRequest<ServerMembersApiResponse>(`/servers/${serverId}/members`, { token });
 };
 
 export const getMessagesByChannel = async (

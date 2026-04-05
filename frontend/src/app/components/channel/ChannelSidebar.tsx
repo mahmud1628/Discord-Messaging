@@ -1,15 +1,8 @@
 import { useParams, useNavigate } from "react-router";
 import { useApp } from "../../contexts/AppContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { Hash, ChevronDown, Settings, LogOut } from "lucide-react";
+import { Hash, LogOut } from "lucide-react";
 import { motion } from "motion/react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
 
 export function ChannelSidebar() {
   const { serverId, channelId } = useParams();
@@ -37,25 +30,9 @@ export function ChannelSidebar() {
   return (
     <div className="w-60 bg-[#2b2d31] flex flex-col">
       {/* Server Header */}
-      <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center justify-between px-4 h-12 border-b border-[#1e1f22] hover:bg-[#35363c] transition-colors text-white font-semibold text-[15px] focus:outline-none shadow-sm">
-          <span className="truncate">{currentServer.name}</span>
-          <ChevronDown className="w-4 h-4 ml-2 flex-shrink-0" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56 bg-[#111827] border-[#1e1f22] text-[#b5bac1]">
-          <DropdownMenuItem className="text-[#5865f2] focus:text-[#5865f2] focus:bg-[#5865f2]/10">
-            Invite People
-          </DropdownMenuItem>
-          <DropdownMenuItem className="focus:bg-[#4e5058] focus:text-white">
-            <Settings className="w-4 h-4 mr-2" />
-            Server Settings
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-[#3f4147]" />
-          <DropdownMenuItem className="text-[#f23f42] focus:text-[#f23f42] focus:bg-[#f23f42]/10">
-            Leave Server
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center px-4 h-12 border-b border-[#1e1f22] text-white font-semibold text-[15px] shadow-sm">
+        <span className="truncate">{currentServer.name}</span>
+      </div>
 
       {/* Channels List */}
       <div className="flex-1 overflow-y-auto px-2 py-3">
@@ -98,25 +75,15 @@ export function ChannelSidebar() {
           <div className="text-sm text-white font-medium truncate">{user?.displayName}</div>
           <div className="text-xs text-[#949ba4]">Online</div>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger className="p-1.5 hover:bg-[#35363c] rounded text-[#b5bac1] hover:text-[#dbdee1] focus:outline-none transition-colors">
-            <Settings className="w-4 h-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-48 bg-[#111827] border-[#1e1f22] mb-2 text-[#b5bac1]">
-            <DropdownMenuItem className="focus:bg-[#4e5058] focus:text-white">
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-[#3f4147]" />
-            <DropdownMenuItem
-              onClick={handleLogout}
-              className="text-[#f23f42] focus:text-[#f23f42] focus:bg-[#f23f42]/10"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Log Out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="p-1.5 hover:bg-[#35363c] rounded text-[#b5bac1] hover:text-[#f23f42] focus:outline-none transition-colors"
+          aria-label="Log Out"
+          title="Log Out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

@@ -56,7 +56,7 @@ export function MessageItem({ message }: MessageItemProps) {
   const { user: authUser, token } = useAuth();
 
   const messageUser = users.find((u) => u.id === message.userId);
-  const currentUserId = authUser?.id || "user-1";
+  const currentUserId = authUser?.id;
   const isAuthor = authUser?.id === message.userId;
 
   if (!messageUser) return null;
@@ -81,6 +81,8 @@ export function MessageItem({ message }: MessageItemProps) {
   };
 
   const handleReaction = async (emoji: string) => {
+    if (!currentUserId) return;
+
     try {
       await toggleReaction(message.id, emoji, currentUserId);
       setShowEmojiPicker(false);
@@ -90,6 +92,8 @@ export function MessageItem({ message }: MessageItemProps) {
   };
 
   const handleReactionClick = async (emoji: string) => {
+    if (!currentUserId) return;
+
     try {
       await toggleReaction(message.id, emoji, currentUserId);
     } catch (error) {
@@ -201,7 +205,7 @@ export function MessageItem({ message }: MessageItemProps) {
               {message.reactions.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {message.reactions.map((reaction) => {
-                    const hasReacted = reaction.userIds.includes(currentUserId);
+                    const hasReacted = reaction.userIds.includes(currentUserId ?? "");
                     const reactorNames = reaction.userIds
                       .map((id) => users.find((entry) => entry.id === id))
                       .filter(Boolean)

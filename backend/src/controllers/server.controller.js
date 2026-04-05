@@ -13,3 +13,18 @@ exports.listServers = async (_req, res) => {
     return res.status(500).json({ error: "Database error" });
   }
 };
+
+exports.listServerMembers = async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const result = await serverService.listServerMembers(serverId);
+
+    return res.json({
+      members: result.rows,
+      count: result.rows.length,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Database error" });
+  }
+};
