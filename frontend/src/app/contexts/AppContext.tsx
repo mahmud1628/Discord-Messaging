@@ -21,6 +21,7 @@ import { createSocket, type AppSocket } from "../utils/socket";
 
 export interface Message {
   id: string;
+  renderKey?: string;
   content: string;
   userId: string;
   channelId: string;
@@ -30,6 +31,7 @@ export interface Message {
   reactions: Reaction[];
   pinned: boolean;
   attachments?: MessageAttachment[];
+  optimistic?: boolean;
 }
 
 export interface MessageAttachment {
@@ -38,6 +40,7 @@ export interface MessageAttachment {
   fileName: string;
   fileSize?: number;
   mimeType?: string;
+  isLocalPreview?: boolean;
 }
 
 export interface Reaction {
@@ -275,6 +278,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (prev.some((msg) => msg.id === mappedMessage.id)) {
           return prev;
         }
+
+        const incomingAuthorId = String(incoming.author?.id ?? "");
+        const optimisticIndex = prev.findIndex(
+          (msg) =>
+            msg.optimistic &&
+            msg.channelId === incomingChannelId &&
+            msg.content === mappedMessage.content &&
+            msg.userId === incomingAuthorId
+        );
+
+        if (optimisticIndex >= 0) {
+          const optimisticMessage = prev[optimisticIndex];
+          const next = [...prev];
+          next[optimisticIndex] = {
+            ...mappedMessage,
+            renderKey: optimisticMessage.renderKey || optimisticMessage.id,
+          };
+          return next;
+        }
+
         return [...prev, mappedMessage];
       });
 
@@ -763,44 +786,91 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Not authenticated");
     }
 
-    const response = await sendMessageToChannel({
-      serverId: selectedServerId,
-      channelId,
-      content,
-      token,
-      attachments,
+    const tempId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? `temp-${crypto.randomUUID()}`
+        : `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const createdAt = new Date().toISOString();
+    const senderUserId = user?.id ?? "unknown-user";
+
+    const localPreviewUrls: string[] = [];
+    const optimisticAttachments = (attachments ?? []).map((file, index) => {
+      const previewUrl = URL.createObjectURL(file);
+      localPreviewUrls.push(previewUrl);
+
+      return {
+        id: `temp-attachment-${tempId}-${index}`,
+        fileUrl: previewUrl,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        isLocalPreview: true,
+      };
     });
 
-    const fallbackUserId = user?.id ?? "unknown-user";
-    const newMessage: Message = {
-      id: String(response.message.id),
-      content: response.message.content,
-      userId: String(response.message.author_id ?? fallbackUserId),
-      channelId: String(response.message.channel_id ?? channelId),
-      createdAt: response.message.created_at,
-      updatedAt: response.message.edited_at ?? undefined,
-      edited: Boolean(response.message.edited_at),
+    const optimisticMessage: Message = {
+      id: tempId,
+      renderKey: tempId,
+      content,
+      userId: senderUserId,
+      channelId,
+      createdAt,
+      edited: false,
       reactions: [],
       pinned: false,
-      attachments: response.file_url
-        ? [
-            {
-              id: String(response.attachment_id || ""),
-              fileUrl: response.file_url,
-              fileName: response.file_name || "attachment",
-              fileSize: response.file_size,
-              mimeType: response.mime_type,
-            },
-          ].filter((attachment) => Boolean(attachment.id))
-        : [],
+      attachments: optimisticAttachments,
+      optimistic: true,
     };
 
-    setMessages((prev) => {
-      if (prev.some((msg) => msg.id === newMessage.id)) {
-        return prev;
-      }
-      return [...prev, newMessage];
-    });
+    setMessages((prev) => [...prev, optimisticMessage]);
+
+    try {
+      const response = await sendMessageToChannel({
+        serverId: selectedServerId,
+        channelId,
+        content,
+        token,
+        attachments,
+      });
+
+      const fallbackUserId = user?.id ?? "unknown-user";
+      const newMessage: Message = {
+        id: String(response.message.id),
+        renderKey: tempId,
+        content: response.message.content,
+        userId: String(response.message.author_id ?? fallbackUserId),
+        channelId: String(response.message.channel_id ?? channelId),
+        createdAt: response.message.created_at,
+        updatedAt: response.message.edited_at ?? undefined,
+        edited: Boolean(response.message.edited_at),
+        reactions: [],
+        pinned: false,
+        attachments: response.file_url
+          ? [
+              {
+                id: String(response.attachment_id || ""),
+                fileUrl: response.file_url,
+                fileName: response.file_name || "attachment",
+                fileSize: response.file_size,
+                mimeType: response.mime_type,
+              },
+            ].filter((attachment) => Boolean(attachment.id))
+          : [],
+      };
+
+      setMessages((prev) => {
+        const withoutOptimistic = prev.filter((msg) => msg.id !== tempId);
+        if (withoutOptimistic.some((msg) => msg.id === newMessage.id)) {
+          return withoutOptimistic;
+        }
+        return [...withoutOptimistic, newMessage];
+      });
+    } catch (error) {
+      setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
+      throw error;
+    } finally {
+      localPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    }
   };
 
   const editMessage = async (messageId: string, content: string) => {
@@ -808,26 +878,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Not authenticated");
     }
 
-    const response = await updateMessageContent({
-      serverId: selectedServerId,
-      channelId: selectedChannelId,
-      messageId,
-      content,
-      token,
-    });
+    let previousMessage: Message | undefined;
+    const optimisticUpdatedAt = new Date().toISOString();
 
     setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId
-          ? {
-              ...msg,
-              content: response.message.content,
-              edited: true,
-              updatedAt: response.message.edited_at ?? new Date().toISOString(),
-            }
-          : msg
-      )
+      prev.map((msg) => {
+        if (msg.id !== messageId) {
+          return msg;
+        }
+
+        previousMessage = msg;
+        return {
+          ...msg,
+          content,
+          edited: true,
+          updatedAt: optimisticUpdatedAt,
+        };
+      })
     );
+
+    try {
+      const response = await updateMessageContent({
+        serverId: selectedServerId,
+        channelId: selectedChannelId,
+        messageId,
+        content,
+        token,
+      });
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                content: response.message.content,
+                edited: true,
+                updatedAt: response.message.edited_at ?? new Date().toISOString(),
+              }
+            : msg
+        )
+      );
+    } catch (error) {
+      if (previousMessage) {
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === messageId ? previousMessage as Message : msg))
+        );
+      }
+      throw error;
+    }
   };
 
   const deleteMessageAttachmentsHandler = async (
@@ -876,14 +974,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Not authenticated");
     }
 
-    await deleteMessageById({
-      serverId: selectedServerId,
-      channelId: selectedChannelId,
-      messageId,
-      token,
+    let removedMessage: Message | undefined;
+    let removedIndex = -1;
+
+    setMessages((prev) => {
+      removedIndex = prev.findIndex((msg) => msg.id === messageId);
+      if (removedIndex === -1) {
+        return prev;
+      }
+
+      removedMessage = prev[removedIndex];
+      return prev.filter((msg) => msg.id !== messageId);
     });
 
-    setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+    try {
+      await deleteMessageById({
+        serverId: selectedServerId,
+        channelId: selectedChannelId,
+        messageId,
+        token,
+      });
+    } catch (error) {
+      if (removedMessage && removedIndex >= 0) {
+        setMessages((prev) => {
+          if (prev.some((msg) => msg.id === removedMessage?.id)) {
+            return prev;
+          }
+
+          const next = [...prev];
+          const insertIndex = Math.min(Math.max(removedIndex, 0), next.length);
+          next.splice(insertIndex, 0, removedMessage as Message);
+          return next;
+        });
+      }
+
+      throw error;
+    }
   };
 
   const toggleReaction = async (messageId: string, emoji: string, userId: string) => {
@@ -894,28 +1020,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const target = messages.find((msg) => msg.id === messageId);
     const existingReaction = target?.reactions.find((r) => r.emoji === emoji);
     const hasReacted = existingReaction ? existingReaction.userIds.includes(userId) : false;
+    const nextAction: "add" | "remove" = hasReacted ? "remove" : "add";
+    const rollbackAction: "add" | "remove" = hasReacted ? "add" : "remove";
 
-    if (hasReacted) {
-      await removeReactionFromMessage({
-        serverId: selectedServerId,
-        channelId: selectedChannelId,
-        messageId,
-        emoji,
-        token,
-      });
-    } else {
-      await addReactionToMessage({
-        serverId: selectedServerId,
-        channelId: selectedChannelId,
-        messageId,
-        emoji,
-        token,
-      });
+    setMessages((prev) => applyReactionMutation(prev, messageId, emoji, userId, nextAction));
+
+    try {
+      if (hasReacted) {
+        await removeReactionFromMessage({
+          serverId: selectedServerId,
+          channelId: selectedChannelId,
+          messageId,
+          emoji,
+          token,
+        });
+      } else {
+        await addReactionToMessage({
+          serverId: selectedServerId,
+          channelId: selectedChannelId,
+          messageId,
+          emoji,
+          token,
+        });
+      }
+    } catch (error) {
+      setMessages((prev) => applyReactionMutation(prev, messageId, emoji, userId, rollbackAction));
+      throw error;
     }
-
-    setMessages((prev) =>
-      applyReactionMutation(prev, messageId, emoji, userId, hasReacted ? "remove" : "add")
-    );
   };
 
   const togglePin = async (messageId: string) => {
@@ -925,25 +1056,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const target = messages.find((msg) => msg.id === messageId);
     const shouldUnpin = Boolean(target?.pinned);
+    const nextPinnedState = !shouldUnpin;
 
-    if (shouldUnpin) {
-      await unpinMessage({
-        serverId: selectedServerId,
-        channelId: selectedChannelId,
-        messageId,
-        token,
-      });
+    setMessages((prev) => applyPinMutation(prev, messageId, nextPinnedState));
 
-      setMessages((prev) => applyPinMutation(prev, messageId, false));
-    } else {
-      await pinMessage({
-        serverId: selectedServerId,
-        channelId: selectedChannelId,
-        messageId,
-        token,
-      });
-
-      setMessages((prev) => applyPinMutation(prev, messageId, true));
+    try {
+      if (shouldUnpin) {
+        await unpinMessage({
+          serverId: selectedServerId,
+          channelId: selectedChannelId,
+          messageId,
+          token,
+        });
+      } else {
+        await pinMessage({
+          serverId: selectedServerId,
+          channelId: selectedChannelId,
+          messageId,
+          token,
+        });
+      }
+    } catch (error) {
+      setMessages((prev) => applyPinMutation(prev, messageId, shouldUnpin));
+      throw error;
     }
   };
 

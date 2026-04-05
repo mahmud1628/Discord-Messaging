@@ -29,15 +29,31 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     e.preventDefault();
     if (!message.trim() && attachments.length === 0) return;
 
+    const draftMessage = message;
+    const draftAttachmentFiles = attachments.map((item) => item.file);
+
     try {
       // In a real app, you would upload attachments first and get URLs
-      const messageText = message.trim() || (attachments.length > 0 ? `[${attachments.length} attachment${attachments.length > 1 ? 's' : ''}]` : "");
-      await sendMessage(messageText, channelId, attachments.map((item) => item.file));
+      const messageText =
+        message.trim() ||
+        (attachments.length > 0
+          ? `[${attachments.length} attachment${attachments.length > 1 ? "s" : ""}]`
+          : "");
+
       setMessage("");
       clearAttachments();
-      toast.success("Message sent!");
+
+      await sendMessage(messageText, channelId, draftAttachmentFiles);
     } catch (error) {
       toast.error("Failed to send message");
+      setMessage(draftMessage);
+      setAttachments(
+        draftAttachmentFiles.map((file) => ({
+          file,
+          url: URL.createObjectURL(file),
+          type: file.type.startsWith("image/") ? "image" : "file",
+        }))
+      );
     }
   };
 

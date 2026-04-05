@@ -21,8 +21,6 @@ export function ChatHeader({ channel, onJumpToMessage }: ChatHeaderProps) {
         <div className="flex items-center gap-2">
           <Hash className="w-5 h-5 text-[#80848e]" />
           <h2 className="text-white font-semibold text-[16px]">{channel.name}</h2>
-          <div className="w-px h-6 bg-[#3f4147] mx-2" />
-          <p className="text-[#b5bac1] text-sm">Channel description goes here</p>
         </div>
         <div className="flex items-center gap-2">
           <Button

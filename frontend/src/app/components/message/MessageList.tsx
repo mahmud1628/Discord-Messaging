@@ -54,7 +54,7 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(
         <div className="pt-4 pb-2">
           {messages.map((message) => (
             <div
-              key={message.id}
+              key={message.renderKey || message.id}
               ref={(el) => {
                 if (el) {
                   messageRefs.current.set(message.id, el);

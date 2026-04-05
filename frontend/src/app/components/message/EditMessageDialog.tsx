@@ -46,11 +46,11 @@ export function EditMessageDialog({ message, open, onClose }: EditMessageDialogP
       if (deletingAttachments) {
         await deleteMessageAttachments(message.id, selectedAttachmentIds);
         toast.success("Attachment removed");
+        onClose();
       } else {
+        onClose();
         await editMessage(message.id, trimmedContent);
-        toast.success("Message updated");
       }
-      onClose();
     } catch (error) {
       toast.error("Failed to update message");
     } finally {
