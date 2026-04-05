@@ -1,4 +1,4 @@
-import { Hash, Search, Users, Pin } from "lucide-react";
+import { Hash, Pin } from "lucide-react";
 import { Channel, useApp } from "../../contexts/AppContext";
 import { Button } from "../ui/button";
 import { useState } from "react";
@@ -37,20 +37,6 @@ export function ChatHeader({ channel, onJumpToMessage }: ChatHeaderProps) {
                 {pinnedCount}
               </span>
             )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#35363c] h-8 w-8 p-0"
-          >
-            <Search className="w-5 h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#35363c] h-8 w-8 p-0"
-          >
-            <Users className="w-5 h-5" />
           </Button>
         </div>
       </div>
