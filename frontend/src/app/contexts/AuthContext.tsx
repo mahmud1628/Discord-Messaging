@@ -28,6 +28,27 @@ interface RegisterData {
   dateOfBirth: string;
 }
 
+const isJwtExpired = (token: string) => {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) {
+      return true;
+    }
+
+    const payloadRaw = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payloadJson = JSON.parse(atob(payloadRaw));
+    const exp = Number(payloadJson?.exp);
+
+    if (!Number.isFinite(exp)) {
+      return true;
+    }
+
+    return exp * 1000 <= Date.now();
+  } catch (_error) {
+    return true;
+  }
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -39,6 +60,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     const storedToken = localStorage.getItem("token");
+
+    if (storedToken && isJwtExpired(storedToken)) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setUser(null);
+      setToken(null);
+      setIsLoading(false);
+      return;
+    }
 
     if (storedUser) {
       setUser(JSON.parse(storedUser));
