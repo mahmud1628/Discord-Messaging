@@ -93,7 +93,7 @@ export function Login() {
 
         {/* Demo hint */}
         <div className="mt-6 text-center text-xs text-[#6d6f78]">
-          <p>Demo: Use any email/password to login</p>
+          <p>Use your registered email/username and password to log in.</p>
         </div>
       </div>
     </div>
