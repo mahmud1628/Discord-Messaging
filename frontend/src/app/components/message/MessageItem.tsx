@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Message, useApp } from "../../contexts/AppContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { formatDistanceToNow } from "date-fns";
@@ -40,6 +40,97 @@ import { EmojiPicker } from "./EmojiPicker";
 import { UserProfilePopover } from "../user/UserProfilePopover";
 import { toast } from "sonner";
 import { getAttachmentDownloadUrl } from "../../utils/api";
+
+const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+
+const isImageAttachment = (attachment: {
+  mimeType?: string;
+  fileName?: string;
+  fileUrl?: string;
+}) => {
+  return (
+    attachment.mimeType?.startsWith("image/") ||
+    IMAGE_FILE_RE.test(attachment.fileName || "") ||
+    IMAGE_FILE_RE.test(attachment.fileUrl || "")
+  );
+};
+
+function AttachmentImage({
+  attachment,
+  onOpen,
+  selectedServerId,
+  selectedChannelId,
+  token,
+}: {
+  attachment: {
+    id: string;
+    fileUrl: string;
+    fileName: string;
+    isLocalPreview?: boolean;
+  };
+  onOpen: () => void;
+  selectedServerId: string | null;
+  selectedChannelId: string | null;
+  token: string | null;
+}) {
+  const [src, setSrc] = useState(attachment.fileUrl);
+  const [triedFallback, setTriedFallback] = useState(false);
+
+  useEffect(() => {
+    setSrc(attachment.fileUrl);
+    setTriedFallback(false);
+  }, [attachment.fileUrl, attachment.id]);
+
+  const handleError = async () => {
+    if (
+      triedFallback ||
+      attachment.isLocalPreview ||
+      !selectedServerId ||
+      !selectedChannelId ||
+      !token
+    ) {
+      return;
+    }
+
+    setTriedFallback(true);
+
+    try {
+      const { downloadUrl } = await getAttachmentDownloadUrl({
+        serverId: selectedServerId,
+        channelId: selectedChannelId,
+        attachmentId: attachment.id,
+        token,
+      });
+
+      setSrc(downloadUrl);
+    } catch {
+      // Keep the broken image state if the fallback also fails.
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="block max-w-[420px] overflow-hidden rounded-lg border border-[#1e1f22] bg-[#1f2024] transition-colors hover:border-[#5865f2]/60 text-left"
+    >
+      <div className="flex items-center justify-center bg-[#111214] p-2">
+        <img
+          src={src}
+          alt={attachment.fileName}
+          onError={handleError}
+          className="max-h-[360px] max-w-full rounded-md object-contain"
+        />
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-sm font-medium text-[#dbdee1] truncate">{attachment.fileName}</p>
+        <p className="text-xs text-[#949ba4]">
+          {attachment.isLocalPreview ? "Uploading image..." : "Image attachment"}
+        </p>
+      </div>
+    </button>
+  );
+}
 
 interface MessageItemProps {
   message: Message;
@@ -194,33 +285,21 @@ export function MessageItem({ message }: MessageItemProps) {
               {message.attachments && message.attachments.length > 0 && (
                 <div className="mt-2 space-y-2">
                   {message.attachments.map((attachment) => (
-                    attachment.mimeType?.startsWith("image/") ? (
-                      <button
-                        type="button"
+                    isImageAttachment(attachment) ? (
+                      <AttachmentImage
                         key={attachment.id}
-                        onClick={() =>
+                        attachment={attachment}
+                        onOpen={() =>
                           handleAttachmentClick(
                             attachment.id,
                             attachment.fileUrl,
                             attachment.isLocalPreview
                           )
                         }
-                        className="block max-w-[380px] overflow-hidden rounded-lg border border-[#1e1f22] bg-[#1f2024] transition-colors hover:border-[#5865f2]/60 text-left"
-                      >
-                        <img
-                          src={attachment.fileUrl}
-                          alt={attachment.fileName}
-                          className="max-h-[220px] w-full object-cover"
-                        />
-                        <div className="px-3 py-2">
-                          <p className="text-sm font-medium text-[#dbdee1] truncate">
-                            {attachment.fileName}
-                          </p>
-                          <p className="text-xs text-[#949ba4]">
-                            {attachment.isLocalPreview ? "Uploading image..." : "Image attachment"}
-                          </p>
-                        </div>
-                      </button>
+                        selectedServerId={selectedServerId}
+                        selectedChannelId={selectedChannelId}
+                        token={token}
+                      />
                     ) : (
                       <button
                         type="button"
@@ -371,7 +450,10 @@ export function MessageItem({ message }: MessageItemProps) {
           {/* Emoji Picker */}
           {showEmojiPicker && (
             <div className="absolute top-0 right-16 z-10">
-              <EmojiPicker onSelect={handleReaction} onClose={() => setShowEmojiPicker(false)} />
+              <EmojiPicker
+                onSelectEmoji={handleReaction}
+                onClose={() => setShowEmojiPicker(false)}
+              />
             </div>
           )}
         </motion.div>

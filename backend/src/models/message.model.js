@@ -147,7 +147,8 @@ FROM (
       json_agg(DISTINCT jsonb_build_object(
         'id', a.id,
         'file_url', a.file_url,
-        'file_name', a.file_name
+        'file_name', a.file_name,
+        'mime_type', a.mime_type
       )) FILTER (WHERE a.id IS NOT NULL),
       '[]'
     ) AS attachments,

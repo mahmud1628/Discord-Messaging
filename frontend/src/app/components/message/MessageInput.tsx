@@ -6,6 +6,7 @@ import { useApp } from "../../contexts/AppContext";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { AttachmentMenu } from "./AttachmentMenu";
+import { EmojiPicker } from "./EmojiPicker";
 
 interface MessageInputProps {
   channelId: string;
@@ -18,10 +19,73 @@ interface AttachmentPreview {
   type: "image" | "file";
 }
 
+const createPresetImageFile = async ({
+  title,
+  subtitle,
+  emoji,
+  accent,
+  fileName,
+}: {
+  title: string;
+  subtitle: string;
+  emoji: string;
+  accent: string;
+  fileName: string;
+}) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 900;
+  canvas.height = 500;
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    throw new Error("Canvas not supported");
+  }
+
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, "#111827");
+  gradient.addColorStop(1, accent);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(28, 28, canvas.width - 56, canvas.height - 56);
+
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(60, 60, 420, 380);
+
+  ctx.font = "bold 180px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(emoji, 270, 260);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 52px Inter, system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(title, 520, 170);
+
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.font = "500 30px Inter, system-ui, sans-serif";
+  ctx.fillText(subtitle, 520, 230);
+
+  ctx.fillStyle = "rgba(255,255,255,0.65)";
+  ctx.font = "500 22px Inter, system-ui, sans-serif";
+  ctx.fillText("Discord-Messaging", 520, 300);
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result);
+      else reject(new Error("Failed to create image"));
+    }, "image/png");
+  });
+
+  return new File([blob], fileName, { type: "image/png" });
+};
+
 export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { sendMessage } = useApp();
 
@@ -107,6 +171,131 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const triggerFileInput = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
+    }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessage((prev) => `${prev}${emoji}`);
+    setShowEmojiPicker(false);
+  };
+
+  const addGeneratedImageAttachment = async (file: File) => {
+    const url = URL.createObjectURL(file);
+    setAttachments((prev) => [...prev, { file, url, type: "image" }]);
+    setShowEmojiPicker(false);
+  };
+
+  const handleGifSelect = async (gifId: string) => {
+    const gifMap: Record<string, { title: string; subtitle: string; emoji: string; accent: string; fileName: string }> = {
+      celebrate: {
+        title: "Celebrate",
+        subtitle: "Party time",
+        emoji: "🎉",
+        accent: "#7c3aed",
+        fileName: "celebrate.png",
+      },
+      thumbs_up: {
+        title: "Nice",
+        subtitle: "Thumbs up",
+        emoji: "👍",
+        accent: "#2563eb",
+        fileName: "thumbs-up.png",
+      },
+      laugh: {
+        title: "Laugh",
+        subtitle: "So funny",
+        emoji: "😂",
+        accent: "#f97316",
+        fileName: "laugh.png",
+      },
+      wow: {
+        title: "Wow",
+        subtitle: "Amazing",
+        emoji: "🤩",
+        accent: "#db2777",
+        fileName: "wow.png",
+      },
+      cool: {
+        title: "Cool",
+        subtitle: "Stay chill",
+        emoji: "😎",
+        accent: "#14b8a6",
+        fileName: "cool.png",
+      },
+      fire: {
+        title: "Fire",
+        subtitle: "Hot stuff",
+        emoji: "🔥",
+        accent: "#ef4444",
+        fileName: "fire.png",
+      },
+    };
+
+    const preset = gifMap[gifId];
+    if (!preset) return;
+
+    try {
+      const file = await createPresetImageFile(preset);
+      await addGeneratedImageAttachment(file);
+    } catch {
+      toast.error("Failed to add GIF");
+    }
+  };
+
+  const handleStickerSelect = async (stickerId: string) => {
+    const stickerMap: Record<string, { title: string; subtitle: string; emoji: string; accent: string; fileName: string }> = {
+      heart: {
+        title: "Heart",
+        subtitle: "Sending love",
+        emoji: "❤️",
+        accent: "#ec4899",
+        fileName: "heart.png",
+      },
+      clap: {
+        title: "Clap",
+        subtitle: "Well done",
+        emoji: "👏",
+        accent: "#f59e0b",
+        fileName: "clap.png",
+      },
+      star: {
+        title: "Star",
+        subtitle: "Shining",
+        emoji: "⭐",
+        accent: "#eab308",
+        fileName: "star.png",
+      },
+      spark: {
+        title: "Spark",
+        subtitle: "Sparkle",
+        emoji: "✨",
+        accent: "#8b5cf6",
+        fileName: "spark.png",
+      },
+      good: {
+        title: "Good",
+        subtitle: "Perfect score",
+        emoji: "💯",
+        accent: "#22c55e",
+        fileName: "good.png",
+      },
+      party: {
+        title: "Party",
+        subtitle: "Let's go",
+        emoji: "🥳",
+        accent: "#06b6d4",
+        fileName: "party.png",
+      },
+    };
+
+    const preset = stickerMap[stickerId];
+    if (!preset) return;
+
+    try {
+      const file = await createPresetImageFile(preset);
+      await addGeneratedImageAttachment(file);
+    } catch {
+      toast.error("Failed to add sticker");
     }
   };
 
@@ -239,6 +428,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
               type="button"
               variant="ghost"
               size="sm"
+              onClick={() => setShowEmojiPicker((prev) => !prev)}
               className="text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#4e5058] rounded-full w-6 h-6 p-0 transition-colors"
             >
               <Smile className="w-5 h-5" />
@@ -261,6 +451,19 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
               </motion.div>
             )}
           </div>
+
+          <AnimatePresence>
+            {showEmojiPicker && (
+              <div className="absolute bottom-[56px] right-0 z-20">
+                <EmojiPicker
+                  onSelectEmoji={handleEmojiSelect}
+                  onSelectGif={handleGifSelect}
+                  onSelectSticker={handleStickerSelect}
+                  onClose={() => setShowEmojiPicker(false)}
+                />
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       </form>
     </div>
