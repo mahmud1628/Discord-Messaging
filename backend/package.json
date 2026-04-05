@@ -4,6 +4,7 @@
   "description": "Discord Messaging backend API",
   "main": "src/server.js",
   "scripts": {
+    "lint": "eslint \"src/**/*.js\"",
     "test": "echo \"No tests configured\"",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
@@ -26,6 +27,7 @@
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
+    "eslint": "^8.57.1",
     "nodemon": "^3.1.14"
   }
 }
