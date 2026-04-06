@@ -32,6 +32,13 @@ const errorHandler = (err, _req, res, _next) => {
     });
   }
 
+  if (err?.code === 'ETIMEDOUT' || err?.code === 'ECONNREFUSED' || err?.code === 'ENETUNREACH') {
+    return res.status(503).json({
+      success: false,
+      message: 'Database is temporarily unavailable. Please try again.',
+    });
+  }
+
   const statusCode = err.statusCode || 500;
 
   return res.status(statusCode).json({
