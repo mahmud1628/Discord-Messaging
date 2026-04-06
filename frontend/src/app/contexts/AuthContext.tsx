@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { loginUser, logoutUser, registerUser } from "../utils/api";
+import {
+  AUTH_UNAUTHORIZED_EVENT,
+  loginUser,
+  logoutUser,
+  registerUser,
+} from "../utils/api";
 
 interface User {
   id: string;
@@ -28,25 +33,37 @@ interface RegisterData {
   dateOfBirth: string;
 }
 
-const isJwtExpired = (token: string) => {
+const getJwtExpiryEpochMs = (token: string) => {
   try {
     const parts = token.split(".");
     if (parts.length < 2) {
-      return true;
+      return null;
     }
 
-    const payloadRaw = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payloadRaw = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
     const payloadJson = JSON.parse(atob(payloadRaw));
     const exp = Number(payloadJson?.exp);
 
     if (!Number.isFinite(exp)) {
-      return true;
+      return null;
     }
 
-    return exp * 1000 <= Date.now();
+    return exp * 1000;
   } catch (_error) {
+    return null;
+  }
+};
+
+const isJwtExpired = (token: string) => {
+  const expiryMs = getJwtExpiryEpochMs(token);
+  if (!expiryMs) {
     return true;
   }
+
+  return expiryMs <= Date.now();
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -57,15 +74,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
+  const clearSession = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    setUser(null);
+    setToken(null);
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     const storedToken = localStorage.getItem("token");
 
     if (storedToken && isJwtExpired(storedToken)) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      setUser(null);
-      setToken(null);
+      clearSession();
       setIsLoading(false);
       return;
     }
@@ -80,6 +101,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const expiryMs = getJwtExpiryEpochMs(token);
+    if (!expiryMs) {
+      clearSession();
+      navigate("/login");
+      return;
+    }
+
+    const remainingMs = expiryMs - Date.now();
+    if (remainingMs <= 0) {
+      clearSession();
+      navigate("/login");
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      clearSession();
+      navigate("/login");
+    }, remainingMs + 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [token, navigate]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      clearSession();
+      navigate("/login");
+    };
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+
+    return () => {
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    };
+  }, [navigate]);
 
   const login = async (identifier: string, password: string) => {
     setIsLoading(true);
@@ -150,10 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    setUser(null);
-    setToken(null);
+    clearSession();
     navigate("/login");
   };
 
