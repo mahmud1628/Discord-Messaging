@@ -5,6 +5,8 @@ const viteEnv = (import.meta as ImportMeta & {
 const API_BASE_URL =
   viteEnv?.VITE_API_BASE_URL?.replace(/\/$/, "");
 
+export const AUTH_UNAUTHORIZED_EVENT = "auth:unauthorized";
+
 const resolveApiBaseUrl = () => {
   if (!API_BASE_URL) {
     throw new Error("Missing VITE_API_BASE_URL in frontend environment");
@@ -57,6 +59,10 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
 
   const payload = await parseResponse(response);
 
+  if (response.status === 401 && token && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+  }
+
   if (!response.ok) {
     const message =
       payload?.message || payload?.error || `Request failed with status ${response.status}`;
@@ -84,6 +90,10 @@ async function apiRequestForm<T>(
   });
 
   const payload = await parseResponse(response);
+
+  if (response.status === 401 && token && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+  }
 
   if (!response.ok) {
     const message =
