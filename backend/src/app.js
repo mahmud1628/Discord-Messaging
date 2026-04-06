@@ -12,10 +12,27 @@ const env = require('./config/env');
 
 const app = express();
 
+const normalizeOrigin = (origin) => {
+  if (!origin || typeof origin !== 'string') {
+    return null;
+  }
+
+  const trimmed = origin.trim();
+
+  try {
+    const parsed = new URL(trimmed);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch (_error) {
+    return trimmed.replace(/\/+$/, '');
+  }
+};
+
 const allowedOrigins = (env.corsOrigin || '')
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
+
+const allowAllOrigins = allowedOrigins.includes('*');
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -23,11 +40,17 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (allowedOrigins.includes(origin)) {
+    if (allowAllOrigins) {
       return callback(null, true);
     }
 
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
+    const normalizedRequestOrigin = normalizeOrigin(origin);
+
+    if (normalizedRequestOrigin && allowedOrigins.includes(normalizedRequestOrigin)) {
+      return callback(null, true);
+    }
+
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
